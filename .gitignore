@@ -1,0 +1,5 @@
+*.jfr
+.idea
+.gradle
+build
+*.iml
