@@ -3,9 +3,18 @@ package info.batey.cassandra.load;
 import com.github.rvesse.airline.SingleCommand;
 import com.github.rvesse.airline.annotations.Command;
 import com.github.rvesse.airline.annotations.Option;
+import info.batey.cassandra.load.config.Config;
+import info.batey.cassandra.load.config.Keyspace;
+import info.batey.cassandra.load.config.Table;
 import org.HdrHistogram.Histogram;
+import org.yaml.snakeyaml.TypeDescription;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.Constructor;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.*;
@@ -17,6 +26,20 @@ public class Cload {
     public static void main(String[] args) throws ExecutionException, InterruptedException, IOException {
         SingleCommand<Stress> stress = SingleCommand.singleCommand(Stress.class);
         Stress config = stress.parse(args);
+
+        Constructor ctr = new Constructor(Config.class);
+        TypeDescription configDes = new TypeDescription(Config.class);
+        configDes.putListPropertyType("keyspaces", Keyspace.class);
+        configDes.putListPropertyType("tables", Table.class);
+        ctr.addTypeDescription(configDes);
+        Yaml yaml = new Yaml(ctr);
+
+        InputStream input = new FileInputStream(new File(config.profile));
+        Config profile = (Config) yaml.load(input);
+
+        System.out.println(profile);
+        System.exit(-1);
+
 
         int nrCores = config.cores == 0 ? Runtime.getRuntime().availableProcessors() : config.cores;
         System.out.println("Cores: " + nrCores);
@@ -67,6 +90,9 @@ public class Cload {
 
         @Option(name = "-t", description = "Number of connections per core")
         public int connections = 10;
+
+        @Option(name = "-p", description = "Profile for the run")
+        public String profile;
     }
 
 

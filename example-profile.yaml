@@ -1,0 +1,7 @@
+keyspaces:
+  - name: blah
+    definition: wah
+
+tables:
+  - name: blah
+    definition: wah
