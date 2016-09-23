@@ -1,5 +1,6 @@
 package info.batey.cassandra.load;
 
+import info.batey.cassandra.load.distributions.*;
 import org.HdrHistogram.Histogram;
 
 import java.util.concurrent.Callable;
@@ -18,13 +19,7 @@ public class Core implements Callable<Core.CoreResults> {
         nrClients = connections;
     }
 
-    public void init() {
-        OperationStream reads = new HardcodedSillyReads();
-        OperationStream writes = new SimpleStatementWrite("insert INTO kv (key , value ) values (?, ?)",
-                new TextColumnGenerator("three"),
-                new TextColumnGenerator("four"));
-
-        OperationStream ops = new CombinedOperationStream(reads, writes);
+    public void init(OperationStream ops) {
         clients = IntStream.range(0, nrClients).mapToObj(i -> new Client(ops)).toArray(Client[]::new);
     }
 

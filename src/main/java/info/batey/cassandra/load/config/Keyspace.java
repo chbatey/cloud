@@ -9,6 +9,18 @@ public class Keyspace {
         this.definition = definition;
     }
 
+    // for yaml parsing
+    public Keyspace() {
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getDefinition() {
+        return definition;
+    }
+
     public void setName(String name) {
         this.name = name;
     }

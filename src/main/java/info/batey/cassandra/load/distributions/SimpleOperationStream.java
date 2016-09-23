@@ -1,17 +1,19 @@
-package info.batey.cassandra.load;
+package info.batey.cassandra.load.distributions;
 
 import com.datastax.driver.core.ResultSetFuture;
+import info.batey.cassandra.load.Operation;
+import info.batey.cassandra.load.Request;
 
 import java.util.List;
 
 import static java.util.Arrays.asList;
 
-public class SimpleStatementWrite implements OperationStream {
+public class SimpleOperationStream implements OperationStream {
 
     private final String statement;
-    private final List<ColumnGenerator<?>> cols;
+    private final List<VariableGenerator<?>> cols;
 
-    public SimpleStatementWrite(String statement, ColumnGenerator... cols) {
+    public SimpleOperationStream(String statement, VariableGenerator... cols) {
         this.statement = statement;
         this.cols = asList(cols);
     }

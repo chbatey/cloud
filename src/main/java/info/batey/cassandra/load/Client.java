@@ -3,6 +3,7 @@ package info.batey.cassandra.load;
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.Session;
+import info.batey.cassandra.load.distributions.OperationStream;
 import org.HdrHistogram.Histogram;
 
 import java.util.ArrayList;
@@ -39,7 +40,6 @@ public class Client {
     Result finish() {
         while (!outstandingRequests.isEmpty()) {
             outstanding();
-            System.out.println("Still waiting on requests: " + outstandingRequests.size());
         }
         cluster.closeAsync();
         return new Result(results, success, fail);

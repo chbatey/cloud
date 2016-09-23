@@ -1,59 +1,70 @@
 package info.batey.cassandra.load;
 
+import com.datastax.driver.core.Cluster;
 import com.github.rvesse.airline.SingleCommand;
-import com.github.rvesse.airline.annotations.Command;
-import com.github.rvesse.airline.annotations.Option;
-import info.batey.cassandra.load.config.Config;
-import info.batey.cassandra.load.config.Keyspace;
-import info.batey.cassandra.load.config.Table;
+import info.batey.cassandra.load.config.CLI;
+import info.batey.cassandra.load.config.Profile;
+import info.batey.cassandra.load.distributions.*;
+import info.batey.cassandra.load.schema.SchemaCreator;
 import org.HdrHistogram.Histogram;
-import org.yaml.snakeyaml.TypeDescription;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.Constructor;
 
-import java.io.File;
-import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.IntStream.range;
 
 public class Cload {
-    public static void main(String[] args) throws ExecutionException, InterruptedException, IOException {
-        SingleCommand<Stress> stress = SingleCommand.singleCommand(Stress.class);
-        Stress config = stress.parse(args);
 
-        Constructor ctr = new Constructor(Config.class);
-        TypeDescription configDes = new TypeDescription(Config.class);
-        configDes.putListPropertyType("keyspaces", Keyspace.class);
-        configDes.putListPropertyType("tables", Table.class);
-        ctr.addTypeDescription(configDes);
-        Yaml yaml = new Yaml(ctr);
+    private final SchemaCreator schemaCreator;
+    private final Profile profile;
+    private final CLI stressConfig;
+    private final OperationStreamFactory streamFactory;
 
-        InputStream input = new FileInputStream(new File(config.profile));
-        Config profile = (Config) yaml.load(input);
+    private ExecutorService es;
 
-        System.out.println(profile);
-        System.exit(-1);
+    private List<Core> cores;
+    private List<Future<Core.CoreResults>> results;
 
+    private long totalRequests;
+    private long start;
 
-        int nrCores = config.cores == 0 ? Runtime.getRuntime().availableProcessors() : config.cores;
-        System.out.println("Cores: " + nrCores);
-        long nrRequests = config.requests == 0 ? 1000 : config.requests;
-        long totalRequests = nrCores * nrRequests;
-        ExecutorService es = Executors.newFixedThreadPool(nrCores);
-        List<Core> cores = range(0, nrCores).mapToObj(i -> new Core(nrRequests, config.connections)).collect(toList());
-        cores.forEach(Core::init);
+    public Cload(SchemaCreator schemaCreator, Profile profile, CLI stress, OperationStreamFactory streamFactory) {
+        this.schemaCreator = schemaCreator;
+        this.profile = profile;
+        this.stressConfig = stress;
+        this.streamFactory = streamFactory;
+    }
 
 
-        long start = System.nanoTime();
-        List<Future<Core.CoreResults>> results = cores.stream().map(es::submit).collect(toList());
+    public void init() {
+        schemaCreator.createSchema(profile);
+
+        long nrRequests = stressConfig.requests == 0 ? 1000 : stressConfig.requests;
+        totalRequests = stressConfig.cores * nrRequests;
+        es = Executors.newFixedThreadPool(stressConfig.cores);
+        cores = range(0, stressConfig.cores).mapToObj(i -> new Core(nrRequests, stressConfig.connections)).collect(toList());
 
 
+        cores.forEach(c -> {
+            OperationStream ops = streamFactory.createStream(profile.getStatements(), stressConfig);
+            c.init(ops);
+        });
+    }
+
+    public void start() {
+        start = System.nanoTime();
+        results = cores.stream().map(es::submit).collect(toList());
+    }
+
+    public void awaitFinish() throws ExecutionException, InterruptedException {
+        // Build results in different (tested) class that can be serialized
         int totalSuccess = 0;
         int totalFail = 0;
         Histogram total = new Histogram(3);
@@ -61,6 +72,7 @@ public class Cload {
             Core.CoreResults result = f.get();
             totalSuccess += result.success;
             totalFail += result.failure;
+            total.add(result.histogram);
         }
 
         // ok ok not that accurate
@@ -74,26 +86,38 @@ public class Cload {
         System.out.println("Total duration: " + Duration.ofNanos(totalTime));
         System.out.println("Assuming even load. TPS: " + totalRequests / (totalTime / 1000000000f));
 
-        es.shutdownNow();
-
-        System.out.println("Finished, press enter to shut down JVM...");
-        System.in.read();
     }
 
-    @Command(name = "stress", description = "kills your cassandra cluster")
-    public static class Stress {
-        @Option(name = "-c", description = "Number of cores to use")
-        public int cores;
-
-        @Option(name = "-r", description = "Number of requests per core")
-        public int requests;
-
-        @Option(name = "-t", description = "Number of connections per core")
-        public int connections = 10;
-
-        @Option(name = "-p", description = "Profile for the run")
-        public String profile;
+    public void shutdown() {
+        if (es != null) {
+            es.shutdown();
+        }
     }
 
+    public static void main(String[] args) throws ExecutionException, InterruptedException, IOException {
+        Cluster cluster = null;
+        Cload cload = null;
+        try {
+            SingleCommand<CLI> toParse = SingleCommand.singleCommand(CLI.class);
+            CLI stressConfig = toParse.parse(args);
+            Profile profile = Profile.parse(stressConfig.profile);
 
+            cluster = Cluster.builder()
+                    .addContactPoint("localhost")
+                    .build();
+
+            OperationStreamFactory opsFactory = new OperationStreamFactory();
+
+            cload = new Cload(new SchemaCreator(cluster.connect()), profile, stressConfig, opsFactory);
+            cload.init();
+            cload.start();
+            cload.awaitFinish();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } finally {
+            if (cluster != null) cluster.close();
+            if (cload != null) cload.shutdown();
+        }
+
+    }
 }
