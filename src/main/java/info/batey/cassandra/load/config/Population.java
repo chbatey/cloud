@@ -12,13 +12,13 @@ public enum Population {
     single((def, cli) -> new SingleTextVariable(def.get("value").toString())),
     fixed((def, cli) -> new FixedTextVariable(Integer.valueOf(def.get("number").toString()) / cli.cores));
 
-    private final BiFunction<Map<String, Object>, CLI, VariableGenerator> generate;
+    private final BiFunction<Map<String, Object>, CloadCli.ProfileCommand, VariableGenerator> generate;
 
-    Population(BiFunction<Map<String, Object>, CLI, VariableGenerator> generate) {
+    Population(BiFunction<Map<String, Object>, CloadCli.ProfileCommand, VariableGenerator> generate) {
         this.generate = generate;
     }
 
-    public VariableGenerator getGenerator(Map<String, Object> definition, CLI nrCores) {
+    public VariableGenerator getGenerator(Map<String, Object> definition, CloadCli.ProfileCommand nrCores) {
         return generate.apply(definition, nrCores);
     }
 }

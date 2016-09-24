@@ -8,22 +8,22 @@ tables:
     keyspace: test
 
 statements:
-#  - name: insert1
-#    text: "insert INTO kv (key , value ) values (?, ?)"
-#    variables:
-#
-#      - type: text
-#        population: single
-#        definition:
-#          value: "three"
-#
-#      - type: text
-#        population: single
-#        definition:
-#          value: "four"
+  - name: insert1
+    text: "insert INTO test.kv (key , value ) values (?, ?)"
+    variables:
+
+      - type: text
+        population: single
+        definition:
+          value: "three"
+
+      - type: text
+        population: single
+        definition:
+          value: "four"
 
   - name: insert2
-    text: "insert INTO kv (key, value) values (?, ?)"
+    text: "insert INTO test.kv (key, value) values (?, ?)"
     variables:
 
       - type: text
@@ -37,13 +37,13 @@ statements:
           value: "four"
 
 
-#  - name: query1
-#    text: "select * from kv where key = ?"
-#    variables:
-#      - type: text
-#        population: single
-#        definition:
-#          value: "three"
+  - name: query1
+    text: "select * from test.kv where key = ?"
+    variables:
+      - type: text
+        population: single
+        definition:
+          value: "three"
 
 scenario:
   insert1: 10

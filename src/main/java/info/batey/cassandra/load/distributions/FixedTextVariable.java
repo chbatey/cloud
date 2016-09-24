@@ -16,7 +16,7 @@ public class FixedTextVariable implements VariableGenerator<String> {
     private long used = 0;
 
     public FixedTextVariable(int number) {
-        LOG.error("Using seed {}", seed);
+        LOG.debug("Using seed {}", seed);
         this.number = number;
     }
 

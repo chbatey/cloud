@@ -1,12 +1,12 @@
 package info.batey.cassandra.load.distributions;
 
-import info.batey.cassandra.load.config.CLI;
+import info.batey.cassandra.load.config.CloadCli;
 import info.batey.cassandra.load.config.Statement;
 
 import java.util.List;
 
 public class OperationStreamFactory {
-    public OperationStream createStream(List<Statement> statements, CLI config) {
+    public OperationStream createStream(List<Statement> statements, CloadCli.ProfileCommand config) {
         OperationStream[] streams = statements.stream().map(statement -> {
             VariableGenerator[] variables = statement.getVariables().stream()
                     .map(var -> {

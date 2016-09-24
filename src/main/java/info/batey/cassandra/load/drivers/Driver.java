@@ -1,8 +1,9 @@
-package info.batey.cassandra.load;
+package info.batey.cassandra.load.drivers;
 
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.Session;
+import info.batey.cassandra.load.Request;
 import info.batey.cassandra.load.distributions.OperationStream;
 import org.HdrHistogram.Histogram;
 
@@ -10,24 +11,25 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-public class Client {
-    private Session session;
+public class Driver {
+    private final Cluster cluster;
+    private Result result;
+    private final Session session;
     private List<Request> outstandingRequests = new ArrayList<>();
-    private Histogram results = new Histogram(3);
-    private Cluster cluster;
-    private long success;
-    private long fail;
     private final OperationStream ops;
 
-    public Client(OperationStream ops) {
+    public Driver(OperationStream ops, Cluster cluster, Result result) {
         this.ops = ops;
-        this.cluster = Cluster.builder()
-                .addContactPoint("localhost")
-                .build();
-        this.session = cluster.connect("test");
+        this.cluster = cluster;
+        this.result = result;
+        this.session = cluster.connect();
     }
 
-    long execute() {
+   public void replaceResult(Result result) {
+       this.result = result;
+   }
+
+    public long execute() {
         // check existing calls
         outstanding();
         // add another call
@@ -37,44 +39,31 @@ public class Client {
         return 1;
     }
 
-    Result finish() {
+    public void finish() {
         while (!outstandingRequests.isEmpty()) {
             outstanding();
         }
         cluster.closeAsync();
-        return new Result(results, success, fail);
     }
 
     private void outstanding() {
         Iterator<Request> iter = outstandingRequests.iterator();
         while (iter.hasNext()) {
             Request next = iter.next();
-            if (next.future.isDone()) {
+            if (next.getFuture().isDone()) {
                 // if this thread isn't scheduled often enough or of the executeAsync call blocks
                 // then response time will be over reported
                 iter.remove();
-                results.recordValue(System.nanoTime() - next.startTime);
+                result.getHistogram().recordValue(System.nanoTime() - next.getStartTime());
                 try {
-                    ResultSet rs = next.future.getUninterruptibly();
+                    ResultSet rs = next.getFuture().getUninterruptibly();
                     // do something meaningful
-                    success++;
+                    result.success();
                 } catch (Exception e) {
                     e.printStackTrace();
-                    fail++;
+                    result.fail();
                 }
             }
-        }
-    }
-
-    static class Result {
-        Histogram histogram;
-        long success;
-        long fail;
-
-        public Result(Histogram histogram, long success, long fail) {
-            this.histogram = histogram;
-            this.success = success;
-            this.fail = fail;
         }
     }
 

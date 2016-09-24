@@ -1,7 +1,7 @@
 package info.batey.cassandra.load.distributions;
 
 import com.datastax.driver.core.ResultSetFuture;
-import info.batey.cassandra.load.Operation;
+import info.batey.cassandra.load.drivers.Operation;
 import info.batey.cassandra.load.Request;
 
 import java.util.List;

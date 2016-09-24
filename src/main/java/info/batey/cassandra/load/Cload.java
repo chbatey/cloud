@@ -1,12 +1,20 @@
 package info.batey.cassandra.load;
 
 import com.datastax.driver.core.Cluster;
-import com.github.rvesse.airline.SingleCommand;
-import info.batey.cassandra.load.config.CLI;
+import com.github.rvesse.airline.Cli;
+import com.github.rvesse.airline.help.Help;
+import com.github.rvesse.airline.parser.errors.ParseOptionMissingException;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import info.batey.cassandra.load.concurrency.Core;
+import info.batey.cassandra.load.config.CloadCli;
 import info.batey.cassandra.load.config.Profile;
 import info.batey.cassandra.load.distributions.*;
+import info.batey.cassandra.load.drivers.Result;
 import info.batey.cassandra.load.schema.SchemaCreator;
 import org.HdrHistogram.Histogram;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.jctools.queues.MpscArrayQueue;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -15,65 +23,91 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.IntStream.range;
 
 public class Cload {
 
+    private static final Logger LOG = LogManager.getLogger(Cload.class);
     private final SchemaCreator schemaCreator;
     private final Profile profile;
-    private final CLI stressConfig;
+    private final CloadCli.ProfileCommand config;
     private final OperationStreamFactory streamFactory;
 
-    private ExecutorService es;
+    /*
+        Queue for the single threaded cores to report results. Single reporting thread will read the results
+        and add them to a central histogram.
+     */
+    private final MpscArrayQueue<Result> reportStream;
+
+    private ExecutorService coreExecutor;
 
     private List<Core> cores;
-    private List<Future<Core.CoreResults>> results;
 
     private long totalRequests;
     private long start;
 
-    public Cload(SchemaCreator schemaCreator, Profile profile, CLI stress, OperationStreamFactory streamFactory) {
+    public Cload(SchemaCreator schemaCreator, Profile profile, CloadCli.ProfileCommand stress, OperationStreamFactory streamFactory) {
         this.schemaCreator = schemaCreator;
         this.profile = profile;
-        this.stressConfig = stress;
+        this.config = stress;
         this.streamFactory = streamFactory;
+        this.reportStream = new MpscArrayQueue<>(config.cores * 2);
     }
 
 
     public void init() {
         schemaCreator.createSchema(profile);
-
-        long nrRequests = stressConfig.requests == 0 ? 1000 : stressConfig.requests;
-        totalRequests = stressConfig.cores * nrRequests;
-        es = Executors.newFixedThreadPool(stressConfig.cores);
-        cores = range(0, stressConfig.cores).mapToObj(i -> new Core(nrRequests, stressConfig.connections)).collect(toList());
-
+        totalRequests = config.cores * config.requests;
+        coreExecutor = Executors.newFixedThreadPool(config.cores, new ThreadFactoryBuilder().setNameFormat("Core").build());
+        cores = range(0, config.cores).mapToObj(i -> new Core(i, config, reportStream)).collect(toList());
 
         cores.forEach(c -> {
-            OperationStream ops = streamFactory.createStream(profile.getStatements(), stressConfig);
+            OperationStream ops = streamFactory.createStream(profile.getStatements(), config);
             c.init(ops);
         });
     }
 
     public void start() {
+        LOG.info("Starting cores");
         start = System.nanoTime();
-        results = cores.stream().map(es::submit).collect(toList());
+        cores.forEach(core -> {
+            coreExecutor.submit(core);
+        });
     }
 
-    public void awaitFinish() throws ExecutionException, InterruptedException {
+    public void watchResults() throws ExecutionException, InterruptedException {
         // Build results in different (tested) class that can be serialized
         int totalSuccess = 0;
         int totalFail = 0;
+        int finished = 0;
+        long reports = 0;
         Histogram total = new Histogram(3);
-        for (Future<Core.CoreResults> f : results) {
-            Core.CoreResults result = f.get();
-            totalSuccess += result.success;
-            totalFail += result.failure;
-            total.add(result.histogram);
+
+        while (finished != config.cores) {
+            Result result = reportStream.poll();
+            if (result == null) {
+                continue;
+            }
+            LOG.info("Received result {}", result);
+            reports++;
+            if (result.isFinished()) finished++;
+            totalFail += result.getFail();
+            totalSuccess += result.getSuccess();
+            total.add(result.getHistogram());
+            if (reports % config.cores == 0) {
+               // print the results out
+                System.out.println("Success: " + totalSuccess);
+                System.out.println("Failures: " + totalFail);
+                double percentileAtOrBelowValue = total.getValueAtPercentile(99);
+                System.out.println("99%ile: " + percentileAtOrBelowValue);
+            }
+
+
         }
+
+        coreExecutor.shutdown();
 
         // ok ok not that accurate
         long end = System.nanoTime();
@@ -89,8 +123,8 @@ public class Cload {
     }
 
     public void shutdown() {
-        if (es != null) {
-            es.shutdown();
+        if (coreExecutor != null) {
+            coreExecutor.shutdown();
         }
     }
 
@@ -98,22 +132,35 @@ public class Cload {
         Cluster cluster = null;
         Cload cload = null;
         try {
-            SingleCommand<CLI> toParse = SingleCommand.singleCommand(CLI.class);
-            CLI stressConfig = toParse.parse(args);
-            Profile profile = Profile.parse(stressConfig.profile);
+            Cli<Runnable> cli = new Cli<>(CloadCli.class);
+            Runnable mode = cli.parse(args);
+            mode.run();
 
-            cluster = Cluster.builder()
-                    .addContactPoint("localhost")
-                    .build();
+            if (mode instanceof Help) {
+                System.exit(0);
+            } else if (mode instanceof CloadCli.ProfileCommand) {
 
-            OperationStreamFactory opsFactory = new OperationStreamFactory();
+                CloadCli.ProfileCommand config = (CloadCli.ProfileCommand) mode;
 
-            cload = new Cload(new SchemaCreator(cluster.connect()), profile, stressConfig, opsFactory);
-            cload.init();
-            cload.start();
-            cload.awaitFinish();
+                cluster = Cluster.builder()
+                        .withClusterName("schema creator")
+                        .addContactPoint("localhost")
+                        .build();
+
+                Profile profile = Profile.parse(config.profile);
+
+                OperationStreamFactory opsFactory = new OperationStreamFactory();
+
+                cload = new Cload(new SchemaCreator(cluster.connect()), profile, config, opsFactory);
+                cload.init();
+                cluster.closeAsync();
+                cload.start();
+                cload.watchResults();
+            }
         } catch (FileNotFoundException e) {
-            e.printStackTrace();
+            System.out.println("File does not exist: " + e.getMessage());
+        } catch (ParseOptionMissingException e) {
+            System.out.println("Mandatory option missing: " + e.getOptionTitle());
         } finally {
             if (cluster != null) cluster.close();
             if (cload != null) cload.shutdown();
