@@ -5,13 +5,13 @@ import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.Session;
 import info.batey.cassandra.load.Request;
 import info.batey.cassandra.load.distributions.OperationStream;
-import org.HdrHistogram.Histogram;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
 public class Driver {
+
     private final Cluster cluster;
     private Result result;
     private final Session session;

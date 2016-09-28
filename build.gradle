@@ -16,14 +16,18 @@ repositories {
     mavenCentral()
 }
 
+def log4jVersion = '2.6.2'
+
 dependencies {
     compile 'com.datastax.cassandra:cassandra-driver-core:3.1.0'
     compile 'com.github.rvesse:airline:2.1.1'
     compile 'org.hdrhistogram:HdrHistogram:2.1.9'
     compile 'org.yaml:snakeyaml:1.17'
-    compile 'org.apache.logging.log4j:log4j-core:2.6.2'
+    compile "org.apache.logging.log4j:log4j-core:$log4jVersion"
+    compile "org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion"
     compile 'com.google.guava:guava:19.0'
     compile 'org.jctools:jctools-core:1.2.1'
+    compile 'org.javassist:javassist:3.20.0-GA'
 
     testCompile 'org.cassandraunit:cassandra-unit-shaded:2.1.9.2'
     testCompile 'junit:junit:4.11'

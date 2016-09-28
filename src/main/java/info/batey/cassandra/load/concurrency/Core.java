@@ -47,7 +47,8 @@ public class Core implements Runnable {
 
     @Override
     public void run() {
-        LOG.debug("Core {} starting", core);
+        Thread.currentThread().setName("Core " + core);
+        LOG.info("Core {} starting", core);
         lastReport = System.currentTimeMillis();
         while (currentTotal < totalRequests) {
             LOG.trace("Finished {} out of {} requests", currentTotal, totalRequests);
@@ -55,7 +56,7 @@ public class Core implements Runnable {
                 currentTotal += client.execute();
             }
             if ((System.currentTimeMillis() - lastReport) > reportInterval) {
-                LOG.info("Core {} reporting results", core);
+                LOG.trace("Core {} reporting results", core);
                 reportStream.offer(currentResult);
                 currentResult = new Result(new Histogram(3));
                 for (Driver client : clients) {

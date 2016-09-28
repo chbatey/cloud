@@ -1,6 +1,7 @@
 package info.batey.cassandra.load;
 
 import com.datastax.driver.core.Cluster;
+import com.datastax.driver.core.exceptions.NoHostAvailableException;
 import com.github.rvesse.airline.Cli;
 import com.github.rvesse.airline.help.Help;
 import com.github.rvesse.airline.parser.errors.ParseOptionMissingException;
@@ -60,7 +61,7 @@ public class Cload {
     public void init() {
         schemaCreator.createSchema(profile);
         totalRequests = config.cores * config.requests;
-        coreExecutor = Executors.newFixedThreadPool(config.cores, new ThreadFactoryBuilder().setNameFormat("Core").build());
+        coreExecutor = Executors.newFixedThreadPool(config.cores);
         cores = range(0, config.cores).mapToObj(i -> new Core(i, config, reportStream)).collect(toList());
 
         cores.forEach(c -> {
@@ -90,7 +91,7 @@ public class Cload {
             if (result == null) {
                 continue;
             }
-            LOG.info("Received result {}", result);
+            LOG.debug("Received result {}", result);
             reports++;
             if (result.isFinished()) finished++;
             totalFail += result.getFail();
@@ -98,14 +99,11 @@ public class Cload {
             total.add(result.getHistogram());
             if (reports % config.cores == 0) {
                // print the results out
-                System.out.println("Success: " + totalSuccess);
-                System.out.println("Failures: " + totalFail);
-                double percentileAtOrBelowValue = total.getValueAtPercentile(99);
-                System.out.println("99%ile: " + percentileAtOrBelowValue);
+                double percentileAtOrBelowValue = total.getValueAtPercentile(99) / 1000; // convert to microseconds
+                System.out.printf("\rSuccess: %d Fail: %d 99-ile:  %f", totalSuccess, totalFail, percentileAtOrBelowValue);
             }
-
-
         }
+        System.out.println();
 
         coreExecutor.shutdown();
 
@@ -117,7 +115,9 @@ public class Cload {
 
         System.out.println("Success: " + totalSuccess);
         System.out.println("Failures: " + totalFail);
-        System.out.println("Total duration: " + Duration.ofNanos(totalTime));
+        System.out.println("99%ile: " + total.getPercentileAtOrBelowValue(99) / 1000);
+        Duration duration = Duration.ofNanos(totalTime);
+        System.out.printf("Duration: %d seconds\n", duration.getSeconds());
         System.out.println("Assuming even load. TPS: " + totalRequests / (totalTime / 1000000000f));
 
     }
@@ -161,7 +161,11 @@ public class Cload {
             System.out.println("File does not exist: " + e.getMessage());
         } catch (ParseOptionMissingException e) {
             System.out.println("Mandatory option missing: " + e.getOptionTitle());
-        } finally {
+        } catch (NoHostAvailableException e) {
+            LOG.debug("Unable to connect for schema creation", e);
+            System.out.println("Unable to connect to schema: " + e.getMessage());
+        }
+        finally {
             if (cluster != null) cluster.close();
             if (cload != null) cload.shutdown();
         }
