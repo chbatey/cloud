@@ -1,11 +1,14 @@
-package info.batey.cassandra.load.distributions;
+package info.batey.cassandra.load.distributions.fixed;
 
+import com.datastax.driver.core.utils.UUIDs;
+import info.batey.cassandra.load.distributions.VariableGenerator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Random;
+import java.util.UUID;
 
-public class FixedTextVariable implements VariableGenerator<String> {
+public class FixedTimeuuidVariable implements VariableGenerator<UUID> {
 
     private static Logger LOG = LogManager.getLogger(FixedTextVariable.class);
 
@@ -15,18 +18,19 @@ public class FixedTextVariable implements VariableGenerator<String> {
 
     private long used = 0;
 
-    public FixedTextVariable(int number) {
+    public FixedTimeuuidVariable(int number) {
         LOG.debug("Using seed {}", seed);
         this.number = number;
     }
 
     @Override
-    public String next() {
+    public UUID next() {
         if (used == number) {
             used = 0;
             generator = new Random(seed);
         }
         used++;
-        return String.valueOf(generator.nextLong());
+
+        return UUIDs.endOf(generator.nextLong());
     }
 }

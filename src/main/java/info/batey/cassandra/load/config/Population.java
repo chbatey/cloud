@@ -1,24 +1,27 @@
 package info.batey.cassandra.load.config;
 
 
-import info.batey.cassandra.load.distributions.FixedTextVariable;
+import info.batey.cassandra.load.distributions.fixed.FixedTextVariable;
 import info.batey.cassandra.load.distributions.SingleTextVariable;
 import info.batey.cassandra.load.distributions.VariableGenerator;
 
-import java.util.Map;
 import java.util.function.BiFunction;
 
 public enum Population {
-    single((def, cli) -> new SingleTextVariable(def.get("value").toString())),
-    fixed((def, cli) -> new FixedTextVariable(Integer.valueOf(def.get("number").toString()) / cli.cores));
+    single((variable, cli) -> {
+        return new SingleTextVariable(variable.getDefinition().get("value").toString());
+    }),
+    fixed((variable, cli) -> {
+        return new FixedTextVariable(Integer.valueOf(variable.getDefinition().get("number").toString()) / cli.cores);
+    });
 
-    private final BiFunction<Map<String, Object>, CloadCli.ProfileCommand, VariableGenerator> generate;
+    private final BiFunction<Variable, CloadCli.ProfileCommand, VariableGenerator> generate;
 
-    Population(BiFunction<Map<String, Object>, CloadCli.ProfileCommand, VariableGenerator> generate) {
+    Population(BiFunction<Variable, CloadCli.ProfileCommand, VariableGenerator> generate) {
         this.generate = generate;
     }
 
-    public VariableGenerator getGenerator(Map<String, Object> definition, CloadCli.ProfileCommand nrCores) {
-        return generate.apply(definition, nrCores);
+    public VariableGenerator getGenerator(Variable variable, CloadCli.ProfileCommand nrCores) {
+        return generate.apply(variable, nrCores);
     }
 }

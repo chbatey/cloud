@@ -1,6 +1,9 @@
 A little experiment replicating cassandra stress but 
 using execute async and a thread per core.
 
+Goal of this project is to create a load test tool for cassandra that has
+no contention/blocking and very little allocation.
+
 ### Building
 
 ```
@@ -19,11 +22,11 @@ Type support:
 
 * Text
 * 32 bit ints
-* 64 bit logs
+* 64 bit ints
 
 Scenarios:
 
-* Ratio of differnt queries
+* Ratio of different queries
 
 Data generation:
 

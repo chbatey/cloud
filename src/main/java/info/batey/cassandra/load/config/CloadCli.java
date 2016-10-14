@@ -17,7 +17,7 @@ public class CloadCli {
         public int cores = Runtime.getRuntime().availableProcessors();
 
         @Option(name = "-r", description = "Number of requests per core. Default: 1000")
-        public int requests = 1000;
+        public long requests = 1000;
 
         @Option(name = "-t", description = "Number of drivers per core. Default: 1")
         public int drivers = 1;

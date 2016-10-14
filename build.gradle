@@ -36,3 +36,5 @@ dependencies {
 
 
 mainClassName = 'info.batey.cassandra.load.Cload'
+
+build.dependsOn(shadowJar)

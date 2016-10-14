@@ -13,7 +13,7 @@ public class ProfileCommandTest {
 
     @Test
     public void testLoad() throws Exception {
-        Profile profile = Profile.parse("example-profile.yaml");
+        Profile profile = Profile.parse("profile.yaml");
         System.out.println(profile);
     }
 

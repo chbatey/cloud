@@ -8,7 +8,7 @@ public class CoreTest {
     @Test
     public void something() throws Exception {
         CloadCli.ProfileCommand profile = new CloadCli.ProfileCommand();
-        new Core(profile, new MpscArrayQueue<>(1));
+        new Core(1, profile, new MpscArrayQueue<>(1));
         // todo test something
     }
 }

@@ -6,6 +6,9 @@ tables:
   - name: kv
     definition: "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)"
     keyspace: test
+  - name: clustering
+    definition: "CREATE TABLE IF NOT EXISTS clustering(key TEXT, time TIMEUUID, value TEXT, PRIMARY KEY(key, time))"
+    keyspace: test
 
 statements:
   - name: insert1
@@ -36,6 +39,23 @@ statements:
         definition:
           value: "four"
 
+  - name: insert_to_clustering
+    text: "insert INTO test.clustering (key, time, value) values (?, ?, ?)"
+    variables:
+      - type: text
+        population: fixed
+        definition:
+          number: 100
+
+      - type: timeuuid
+        population: fixed
+        definition:
+          number: 50
+
+      - type: text
+        population: single
+        definition:
+          value: "fo sho"
 
   - name: query1
     text: "select * from test.kv where key = ?"
@@ -48,5 +68,6 @@ statements:
 scenario:
   insert1: 10
   query1: 1
+  insert_to_clustering: 10
 
 
