@@ -28,6 +28,8 @@ dependencies {
     compile 'com.google.guava:guava:19.0'
     compile 'org.jctools:jctools-core:1.2.1'
     compile 'org.javassist:javassist:3.20.0-GA'
+    compile 'org.jfree:jfreesvg:3.2'
+    compile 'org.jfree:jfreechart:1.0.19'
 
     testCompile 'org.cassandraunit:cassandra-unit-shaded:2.1.9.2'
     testCompile 'junit:junit:4.11'

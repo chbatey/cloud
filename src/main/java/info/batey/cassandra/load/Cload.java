@@ -16,7 +16,15 @@ import org.HdrHistogram.Histogram;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jctools.queues.MpscArrayQueue;
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.JFreeChart;
+import org.jfree.data.category.DefaultCategoryDataset;
+import org.jfree.data.time.TimeSeries;
+import org.jfree.graphics2d.svg.SVGGraphics2D;
+import org.jfree.graphics2d.svg.SVGUtils;
 
+import java.awt.*;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.time.Duration;
@@ -78,7 +86,7 @@ public class Cload {
         });
     }
 
-    public void watchResults() throws ExecutionException, InterruptedException {
+    public void watchResults() throws ExecutionException, InterruptedException, IOException {
         // Build results in different (tested) class that can be serialized
         int totalSuccess = 0;
         int totalFail = 0;
@@ -98,7 +106,7 @@ public class Cload {
             totalSuccess += result.getSuccess();
             total.add(result.getHistogram());
             if (reports % config.cores == 0) {
-               // print the results out
+                // print the results out
                 double percentileAtOrBelowValue = total.getValueAtPercentile(99) / 1000; // convert to microseconds
                 System.out.printf("\rSuccess: %d Fail: %d 99-ile:  %f", totalSuccess, totalFail, percentileAtOrBelowValue);
             }
@@ -115,11 +123,36 @@ public class Cload {
 
         System.out.println("Success: " + totalSuccess);
         System.out.println("Failures: " + totalFail);
-        System.out.println("99%ile: " + total.getPercentileAtOrBelowValue(99) / 1000);
+        System.out.println("99%ile: " + total.getValueAtPercentile(99) / 1000);
         Duration duration = Duration.ofNanos(totalTime);
         System.out.printf("Duration: %d seconds\n", duration.getSeconds());
         System.out.println("Assuming even load. TPS: " + totalRequests / (totalTime / 1000000000f));
 
+
+        SVGGraphics2D g2 = new SVGGraphics2D(1000, 500);
+        DefaultCategoryDataset ds = new DefaultCategoryDataset();
+        plot(total, ds, 0);
+        plot(total, ds, 25);
+        plot(total, ds, 50);
+        plot(total, ds, 75);
+        plot(total, ds, 90);
+        plot(total, ds, 95);
+        plot(total, ds, 99);
+        plot(total, ds, 99.9);
+        plot(total, ds, 99.99);
+        plot(total, ds, 99.999);
+        plot(total, ds, 99.9999);
+        plot(total, ds, 100);
+        JFreeChart chart = ChartFactory.createLineChart("Results", "Percentile", "Latency (ms)", ds);
+        Rectangle r = new Rectangle(0, 0, 1000, 500);
+        chart.draw(g2, r);
+
+        File f = new File("results.svg");
+        SVGUtils.writeToSVG(f, g2.getSVGElement());
+    }
+
+    private void plot(Histogram h, DefaultCategoryDataset ds, double percentile) {
+        ds.addValue(h.getValueAtPercentile(percentile) / 1000000, "p", String.valueOf(percentile));
     }
 
     public void shutdown() {
@@ -164,8 +197,7 @@ public class Cload {
         } catch (NoHostAvailableException e) {
             LOG.debug("Unable to connect for schema creation", e);
             System.out.println("Unable to connect to schema: " + e.getMessage());
-        }
-        finally {
+        } finally {
             if (cluster != null) cluster.close();
             if (cload != null) cload.shutdown();
         }
